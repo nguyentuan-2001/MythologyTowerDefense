@@ -8,6 +8,12 @@
 [Uu]ser[Ss]ettings/
 [Mm]emoryCaptures/
 
+# Stray root-level artifact left behind by headless WebGL player builds
+/Data/
+
+# Claude Code local tooling state (not part of the game project)
+.claude/
+
 # Asset meta data should only be ignored when the corresponding asset is also ignored
 !/[Aa]ssets/**/*.meta
 
