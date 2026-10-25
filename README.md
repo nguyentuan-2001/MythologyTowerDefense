@@ -17,12 +17,21 @@ If `Main.unity` is ever missing or you want to regenerate it from scratch, see "
 
 ## Controls
 
-- **Left-click an empty gold pad** beside the road: build a Celestial Archer tower (costs 30 gold).
-- **Left-click an occupied pad**: select that tower — shows its range ring and a stats panel (range / damage / attack interval).
-- **Left-click empty ground**: deselect.
+- **Left-click an empty gold pad** beside the road: opens a build-choice popup — pick **Celestial Archer** (30 gold, single-target, fast) or **Pangu Titan** (50 gold, slower, splash damage to all enemies within 2 units of impact).
+- **Left-click an occupied pad**: select that tower — shows its range ring and a stats panel (name / range / damage / attack interval, plus splash radius for Pangu Titan).
+- **Left-click empty ground**: deselect / cancel the build popup.
 - **Start Wave** button: spawns the current wave (10 enemies, 1 per second).
 - **Pause / Resume** button: freezes/unfreezes gameplay (`Time.timeScale`).
 - **Restart** button: reloads the scene, resetting all state.
+
+### Towers
+
+| Tower | Cost | Range | Damage | Interval | Splash | Role |
+|---|---|---|---|---|---|---|
+| Celestial Archer | 30 | 4.5 | 12 | 0.8s | — | Single-target, fast |
+| Pangu Titan | 50 | 4.5 | 20 | 1.6s | 2.0 | Area damage, slow |
+
+Both towers target the enemy furthest along the route (closest to the base) within range, deterministically — see `TowerController.FindTarget`.
 
 ## Project structure
 
@@ -35,10 +44,11 @@ Assets/_Game/
     Gameplay/Economy/CurrencyManager.cs — gold balance
     Gameplay/Economy/BaseHealth.cs      — base health, depletion event
     Gameplay/Waves/WaveManager.cs       — spawns waves, tracks active enemies, wires rewards/damage
-    Gameplay/Towers/TowerController.cs  — target acquisition, cooldown, firing
-    Gameplay/Towers/ProjectileController.cs — homing projectile, damage on impact
-    Gameplay/Towers/TowerPad.cs         — build placement, cost check, occupancy
-    UI/TowerSelectionController.cs      — new-Input-System mouse raycast for pad clicks/selection
+    Gameplay/Towers/TowerController.cs  — target acquisition, cooldown, firing, optional splash
+    Gameplay/Towers/ProjectileController.cs — homing projectile; splashRadius>0 damages all enemies near impact, not just the locked target
+    Gameplay/Towers/TowerPad.cs         — generic build slot: takes a (prefab, cost) pair at build time, not fixed per pad
+    UI/TowerSelectionController.cs      — new-Input-System mouse raycast for pad clicks/selection; tracks a "pending" empty pad for the build-choice popup
+    UI/TowerBuildMenuController.cs      — shows the build-choice popup for the pending pad, builds whichever catalog entry is picked
     UI/HUDController.cs                 — currency/health/wave text, buttons, end/selection panels
   Editor/
     PrototypeSceneBuilder.cs            — procedurally builds/saves the battlefield scene
@@ -73,6 +83,7 @@ Unity.exe -batchmode -nographics -projectPath <path> -executeMethod MythologyTow
 - An enemy reaching the base damages it exactly once and is unregistered.
 - A tower placed on `TowerPad_00` can actually hit an enemy standing on the real path segment that pad guards (this exact check caught a real bug once — see Known issues/history below).
 - Tower placement spends currency, marks the pad occupied, and blocks a second tower on the same pad.
+- Pangu Titan's splash damage actually reduces the health of two separate nearby enemies from one impact, not just the locked target (caught a real range-measurement bug once — see history below).
 - `GameManager` reaches `Lost` when base health hits zero, and `Won` when `WaveManager` reports all waves complete.
 
 Logs `SMOKE_TEST_RESULT: PASS` or `FAIL - <reason>` to the Console, and exits with a non-zero code on failure when run in batch mode. **Not covered**: real-time wave timing (the 1-second spawn cadence and the "wait for all enemies resolved" coroutine), which only runs in Play Mode — verify that manually.
@@ -116,4 +127,9 @@ This mirrors §12 of the master plan. Items marked ✅ were verified end-to-end 
 
 Per the master plan's scope boundaries (§15), the following are **intentionally not implemented** in this prototype: the full mythological tower roster, tower upgrades (the selection panel has a visible but non-functional "Upgrade (Soon)" button placeholder), multiple waves/levels, animated character art, save/load, and any networked/online features. Decorative flourishes (lanterns, cloud motifs, a stylized road texture) were also deferred in favor of gameplay correctness, per the stated priority order (working gameplay → correctness → UI → polish → extra content).
 
-**History note:** an earlier pass placed tower pads 5.5 units from the path centerline while tower range was 4.5 — towers built but could never reach the road. The original smoke test didn't catch this because it teleported its test enemy next to the tower instead of using real pad/path geometry. Both the scene data (pad offset → 3.8) and the test (now positions the enemy on the actual guarded path segment) were fixed; see `Document/PROGRESS.md` for the full trail.
+**History note (bugs found and fixed during development):**
+1. An earlier pass placed tower pads 5.5 units from the path centerline while tower range was 4.5 — towers built but could never reach the road. The original smoke test didn't catch this because it teleported its test enemy next to the tower instead of using real pad/path geometry. Fixed the pad offset (→ 3.8) and the test (now positions the enemy on the actual guarded path segment).
+2. `TowerController.FindTarget` measured range from `firePoint` (the muzzle tip, which moves as the head rotates to aim) instead of the tower's own base `transform.position` (which is what the visible range-indicator ring is centered on). A freshly-built tower's head starts in its default, never-yet-aimed orientation, which could point the muzzle away from an enemy that was genuinely inside the displayed range circle, causing that enemy to be skipped. Fixed by measuring from `transform.position` instead — now range checks are independent of current aim direction and consistent with what the player sees.
+3. **The big one:** in the WebGL build, clicking Start Wave correctly spawned and registered an enemy, but it never moved — until clicking Pause then Resume, after which everything worked normally. Root cause: `ProjectSettings/TimeManager.asset` had `m_TimeScale: 0` (should be `1`) for reasons unrelated to this project's own code. The Unity Editor silently tolerates/overrides this at Play Mode entry, which is why it never showed up in Editor testing — but a real WebGL player boots with `Time.timeScale` at whatever that project setting says, so every enemy's `Time.deltaTime`-based movement (and every `WaitForSeconds` coroutine) was permanently stuck at zero until something explicitly set `Time.timeScale = 1` (which only happened via the Pause/Resume buttons). Editing the YAML directly didn't stick — Unity kept rewriting it back to `0` on its own — so the fix is defensive instead: `GameManager.Awake()` now explicitly sets `Time.timeScale = 1f` on startup, making correctness independent of that project setting entirely. An earlier, unrelated hypothesis (WebGL needing a "click to grant canvas focus" before input works) led to adding a dismissible "Click to Start" overlay; once the real cause was found and fixed, the overlay was removed since it wasn't actually needed.
+
+See `Document/PROGRESS.md` for the full investigation trail of all three.

@@ -110,6 +110,13 @@ namespace MythologyTowerDefense.EditorTools
                 }
 
                 // --- Tower placement via pad: cost, occupancy, duplicate-block ---
+                GameObject archerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Game/Prefabs/Towers/CelestialArcher.prefab");
+                GameObject panguPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Game/Prefabs/Towers/PanguTitan.prefab");
+                if (archerPrefab == null || panguPrefab == null)
+                {
+                    throw new Exception("CelestialArcher.prefab or PanguTitan.prefab not found.");
+                }
+
                 GameObject padGO = GameObject.Find("TDRoot/TowerPads/TowerPad_00");
                 if (padGO == null)
                 {
@@ -118,7 +125,7 @@ namespace MythologyTowerDefense.EditorTools
 
                 TowerPad pad = padGO.GetComponent<TowerPad>();
                 int currencyBeforePlacement = currency.Currency;
-                bool placed = pad.TryPlaceTower();
+                bool placed = pad.TryPlaceTower(archerPrefab, 30);
 
                 if (!placed)
                 {
@@ -135,7 +142,7 @@ namespace MythologyTowerDefense.EditorTools
                     throw new Exception("Pad did not mark itself occupied after placement.");
                 }
 
-                if (pad.TryPlaceTower())
+                if (pad.TryPlaceTower(archerPrefab, 30))
                 {
                     throw new Exception("Pad allowed placing a second tower on an already-occupied pad.");
                 }
@@ -165,6 +172,99 @@ namespace MythologyTowerDefense.EditorTools
                 if (projectilesAfter <= projectilesBefore)
                 {
                     throw new Exception("Tower on TowerPad_00 did not fire at an enemy standing on the path segment it guards (pad-offset-vs-range geometry bug).");
+                }
+
+                // --- Pangu Titan splash damage: one shot should hit both nearby enemies ---
+                GameObject padGO1 = GameObject.Find("TDRoot/TowerPads/TowerPad_01");
+                if (padGO1 == null)
+                {
+                    throw new Exception("TowerPad_01 not found.");
+                }
+
+                // Earlier steps already spent currency on the Archer purchase; top up so this
+                // section tests Pangu's splash mechanic, not an incidental affordability edge case.
+                currency.Add(50);
+
+                TowerPad pad1 = padGO1.GetComponent<TowerPad>();
+                if (!pad1.TryPlaceTower(panguPrefab, 50))
+                {
+                    throw new Exception("Failed to place Pangu Titan on TowerPad_01.");
+                }
+
+                TowerController panguTower = pad1.PlacedTower;
+                if (panguTower == null)
+                {
+                    throw new Exception("Placed Pangu Titan component not found.");
+                }
+
+                Vector3 segmentMidpoint1 = Vector3.Lerp(path.GetWaypoint(1), path.GetWaypoint(2), 0.5f);
+
+                // Index by "most recently spawned" (Count - 1), not a fixed index — earlier tests
+                // leave their enemies alive and registered (projectiles never actually tick their
+                // Update in this headless test, so they never land), so the list isn't empty here.
+                waveManagerGO.SendMessage("SpawnEnemy");
+                EnemyController splashTargetA = waveManager.ActiveEnemies[waveManager.ActiveEnemies.Count - 1];
+                splashTargetA.transform.position = segmentMidpoint1;
+
+                waveManagerGO.SendMessage("SpawnEnemy");
+                EnemyController splashTargetB = waveManager.ActiveEnemies[waveManager.ActiveEnemies.Count - 1];
+                splashTargetB.transform.position = segmentMidpoint1 + Vector3.forward * 1.0f;
+
+                FieldInfo currentHealthField = typeof(EnemyController).GetField("currentHealth", BindingFlags.NonPublic | BindingFlags.Instance);
+                int healthABefore = (int)currentHealthField.GetValue(splashTargetA);
+                int healthBBefore = (int)currentHealthField.GetValue(splashTargetB);
+
+                // A projectile's own Update() never ticks here (edit mode doesn't advance
+                // Time.deltaTime across SendMessage calls), so it would never actually "arrive".
+                // Fire the tower, find the freshly spawned projectile, then teleport it onto the
+                // target and tick its Update once to force Impact() deterministically.
+                ProjectileController[] projectilesBeforePangu = UnityEngine.Object.FindObjectsByType<ProjectileController>(FindObjectsInactive.Exclude);
+                panguTower.gameObject.SendMessage("Update");
+                ProjectileController[] projectilesAfterPangu = UnityEngine.Object.FindObjectsByType<ProjectileController>(FindObjectsInactive.Exclude);
+
+                ProjectileController newProjectile = null;
+                foreach (ProjectileController candidate in projectilesAfterPangu)
+                {
+                    bool existedBefore = false;
+                    foreach (ProjectileController old in projectilesBeforePangu)
+                    {
+                        if (old == candidate)
+                        {
+                            existedBefore = true;
+                            break;
+                        }
+                    }
+
+                    if (!existedBefore)
+                    {
+                        newProjectile = candidate;
+                        break;
+                    }
+                }
+
+                if (newProjectile == null)
+                {
+                    throw new Exception("Pangu Titan did not fire at enemies within range.");
+                }
+
+                // Teleport onto whichever enemy the tower actually locked (not an assumed fixed
+                // point) so this test doesn't depend on tie-break specifics between A and B.
+                FieldInfo projTargetField = typeof(ProjectileController).GetField("target", BindingFlags.NonPublic | BindingFlags.Instance);
+                EnemyController lockedTarget = (EnemyController)projTargetField.GetValue(newProjectile);
+                if (lockedTarget == null)
+                {
+                    throw new Exception("Pangu Titan's projectile has no locked target.");
+                }
+
+                newProjectile.transform.position = lockedTarget.transform.position;
+                newProjectile.gameObject.SendMessage("Update");
+
+                int healthAAfter = (int)currentHealthField.GetValue(splashTargetA);
+                int healthBAfter = (int)currentHealthField.GetValue(splashTargetB);
+
+                if (healthAAfter >= healthABefore || healthBAfter >= healthBBefore)
+                {
+                    throw new Exception($"Expected Pangu Titan's splash to damage both nearby enemies. A: {healthABefore}->{healthAAfter}, B: {healthBBefore}->{healthBAfter}.");
                 }
 
                 // --- Lose state ---

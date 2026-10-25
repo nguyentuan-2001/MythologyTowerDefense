@@ -152,7 +152,8 @@ namespace MythologyTowerDefense.UI
 
             if (selectionText != null)
             {
-                selectionText.text = $"Celestial Archer\nRange: {tower.Range:0.0}\nDamage: {tower.Damage}\nInterval: {tower.AttackInterval:0.0}s";
+                string splashLine = tower.SplashRadius > 0f ? $"\nSplash: {tower.SplashRadius:0.0}" : string.Empty;
+                selectionText.text = $"{tower.DisplayName}\nRange: {tower.Range:0.0}\nDamage: {tower.Damage}\nInterval: {tower.AttackInterval:0.0}s{splashLine}";
             }
         }
 

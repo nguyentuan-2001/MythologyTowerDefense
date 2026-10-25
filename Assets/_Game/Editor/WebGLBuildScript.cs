@@ -17,6 +17,12 @@ namespace MythologyTowerDefense.EditorTools
             // later for a smaller download.
             PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
 
+            // Without this, Unity can throttle/stall its update loop when it doesn't consider the
+            // browser canvas "focused" (distinct from OS window focus) — observed as the game
+            // appearing frozen after a UI button click (e.g. Start Wave spawning nothing) until an
+            // unrelated state change like Pause/Resume happens to kick the loop again.
+            PlayerSettings.runInBackground = true;
+
             string[] scenes = { "Assets/_Game/Scenes/Main.unity" };
 
             BuildPlayerOptions options = new BuildPlayerOptions

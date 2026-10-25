@@ -6,11 +6,15 @@ namespace MythologyTowerDefense.Gameplay.Towers
 {
     public class TowerController : MonoBehaviour
     {
+        [Header("Identity")]
+        [SerializeField] private string displayName = "Celestial Archer";
+
         [Header("Combat")]
         [SerializeField] private float range = 4.5f;
         [SerializeField] private float attackInterval = 0.8f;
         [SerializeField] private int damage = 12;
         [SerializeField] private float projectileSpeed = 8f;
+        [SerializeField] private float splashRadius = 0f;
 
         [Header("References")]
         [SerializeField] private Transform firePoint;
@@ -19,9 +23,11 @@ namespace MythologyTowerDefense.Gameplay.Towers
         [SerializeField] private WaveManager waveManager;
         [SerializeField] private GameObject rangeIndicator;
 
+        public string DisplayName => displayName;
         public float Range => range;
         public int Damage => damage;
         public float AttackInterval => attackInterval;
+        public float SplashRadius => splashRadius;
 
         private float cooldown;
 
@@ -57,6 +63,9 @@ namespace MythologyTowerDefense.Gameplay.Towers
         /// <summary>
         /// Target priority: the enemy furthest along the route (closest to the base) within range.
         /// Deterministic — ties resolve to whichever enemy is first in the active-enemy list.
+        /// Range is measured from the tower's own base (transform.position), matching the visible
+        /// range indicator disc — NOT from firePoint, which moves as the head rotates to aim and
+        /// would otherwise make "in range" depend on which way the turret currently happens to face.
         /// </summary>
         private EnemyController FindTarget()
         {
@@ -76,7 +85,7 @@ namespace MythologyTowerDefense.Gameplay.Towers
                     continue;
                 }
 
-                float distSq = (enemy.transform.position - firePoint.position).sqrMagnitude;
+                float distSq = (enemy.transform.position - transform.position).sqrMagnitude;
                 if (distSq > rangeSq)
                 {
                     continue;
@@ -121,7 +130,7 @@ namespace MythologyTowerDefense.Gameplay.Towers
             ProjectileController projectile = projectileGO.GetComponent<ProjectileController>();
             if (projectile != null)
             {
-                projectile.Launch(target, damage, projectileSpeed);
+                projectile.Launch(target, damage, projectileSpeed, splashRadius, waveManager);
             }
         }
 

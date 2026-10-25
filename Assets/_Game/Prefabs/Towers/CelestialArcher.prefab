@@ -47,10 +47,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1c07464b50e72224b93216bb398e7ccb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MythologyTowerDefense.Gameplay.Towers.TowerController
+  displayName: Celestial Archer
   range: 4.5
   attackInterval: 0.8
   damage: 12
   projectileSpeed: 8
+  splashRadius: 0
   firePoint: {fileID: 234747300523163085}
   rotatingHead: {fileID: 7619944182879981384}
   projectilePrefab: {fileID: 40124131792416516, guid: fbb025e8ab685dc4f9d478dfc184c016, type: 3}

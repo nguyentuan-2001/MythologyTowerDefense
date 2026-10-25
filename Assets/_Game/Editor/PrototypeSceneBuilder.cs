@@ -50,11 +50,10 @@ namespace MythologyTowerDefense.EditorTools
         };
 
         private const float PathWidth = 4f;
-        // Must stay comfortably inside TowerRange (4.5) so a tower on the pad can actually
-        // reach enemies walking the path centerline. 5.5 (the original value) placed pads
-        // just outside tower range entirely, which is why towers never fired.
+        // Must stay comfortably inside every tower's range (shortest is 4.5) so a tower on the
+        // pad can actually reach enemies walking the path centerline. 5.5 (the original value)
+        // placed pads just outside tower range entirely, which is why towers never fired.
         private const float PadOffsetDistance = 3.8f;
-        private const float TowerRange = 4.5f;
 
         [MenuItem("Tools/Mythology TD/Build Prototype Scene (and Save)")]
         public static void BuildSceneAndSave()
@@ -83,6 +82,8 @@ namespace MythologyTowerDefense.EditorTools
             Material baseMat = GetOrCreateMaterial("Mat_Base", CreamHighlight);
             Material towerBaseMat = GetOrCreateMaterial("Mat_TowerBase", DeepTeal);
             Material towerHeadMat = GetOrCreateMaterial("Mat_TowerHead", WarmGold);
+            Material panguBaseMat = GetOrCreateMaterial("Mat_PanguBase", StoneGray);
+            Material panguHeadMat = GetOrCreateMaterial("Mat_PanguHead", CinnabarRed);
             Material enemyMat = GetOrCreateMaterial("Mat_Enemy", DemonTeal);
             Material healthBarMat = GetOrCreateMaterial("Mat_HealthBar", new Color(0.1f, 0.9f, 0.2f));
             Material healthBarBgMat = GetOrCreateMaterial("Mat_HealthBarBG", Color.black);
@@ -121,7 +122,20 @@ namespace MythologyTowerDefense.EditorTools
 
             GameObject enemyPrefab = BuildEnemyPrefab(enemyMat, healthBarMat, healthBarBgMat);
             GameObject projectilePrefab = BuildProjectilePrefab(projectileMat);
-            GameObject towerPrefab = BuildTowerPrefab(towerBaseMat, towerHeadMat, projectilePrefab, rangeIndicatorMat);
+
+            GameObject archerPrefab = BuildTowerPrefab(
+                "CelestialArcher", "Celestial Archer", towerBaseMat, towerHeadMat, rangeIndicatorMat, projectilePrefab,
+                range: 4.5f, attackInterval: 0.8f, damage: 12, projectileSpeed: 8f, splashRadius: 0f,
+                basePosition: new Vector3(0f, 0.6f, 0f), baseScale: new Vector3(1f, 0.6f, 1f),
+                headPosition: new Vector3(0f, 1.5f, 0f), headScale: new Vector3(0.6f, 0.6f, 0.9f),
+                firePointLocalPosition: new Vector3(0f, 0f, 0.6f));
+
+            GameObject panguPrefab = BuildTowerPrefab(
+                "PanguTitan", "Pangu Titan", panguBaseMat, panguHeadMat, rangeIndicatorMat, projectilePrefab,
+                range: 4.5f, attackInterval: 1.6f, damage: 20, projectileSpeed: 6f, splashRadius: 2f,
+                basePosition: new Vector3(0f, 0.9f, 0f), baseScale: new Vector3(1.6f, 0.9f, 1.6f),
+                headPosition: new Vector3(0f, 2.1f, 0f), headScale: new Vector3(1.0f, 1.0f, 1.2f),
+                firePointLocalPosition: new Vector3(0f, 0f, 0.7f));
 
             GameObject systems = new GameObject("Systems");
             systems.transform.SetParent(root.transform);
@@ -152,7 +166,7 @@ namespace MythologyTowerDefense.EditorTools
             gmSO.FindProperty("waveManager").objectReferenceValue = waveManager;
             gmSO.ApplyModifiedProperties();
 
-            CreatePlacementPads(root.transform, padAvailableMat, towerPrefab, currencyManager, waveManager);
+            CreatePlacementPads(root.transform, padAvailableMat, currencyManager, waveManager);
 
             Camera camera = SetupIsometricCamera(groundCenter, groundSizeX, groundSizeZ);
 
@@ -164,7 +178,7 @@ namespace MythologyTowerDefense.EditorTools
             selSO.ApplyModifiedProperties();
 
             EnsureEventSystem();
-            BuildUI(root.transform, gameManager, currencyManager, baseHealth, waveManager, selection);
+            BuildUI(root.transform, gameManager, currencyManager, baseHealth, waveManager, selection, archerPrefab, panguPrefab);
 
             RegisterSceneInBuildSettings();
 
@@ -300,7 +314,7 @@ namespace MythologyTowerDefense.EditorTools
             baseGoal.GetComponent<Renderer>().sharedMaterial = mat;
         }
 
-        private static void CreatePlacementPads(Transform parent, Material padMat, GameObject towerPrefab, CurrencyManager currencyManager, WaveManager waveManager)
+        private static void CreatePlacementPads(Transform parent, Material padMat, CurrencyManager currencyManager, WaveManager waveManager)
         {
             GameObject padsRoot = new GameObject("TowerPads");
             padsRoot.transform.SetParent(parent);
@@ -322,11 +336,11 @@ namespace MythologyTowerDefense.EditorTools
                     ? candidateA
                     : candidateB;
 
-                CreatePad(padsRoot.transform, $"TowerPad_{i:00}", new Vector3(chosen.x, 0.1f, chosen.z), padMat, towerPrefab, currencyManager, waveManager);
+                CreatePad(padsRoot.transform, $"TowerPad_{i:00}", new Vector3(chosen.x, 0.1f, chosen.z), padMat, currencyManager, waveManager);
             }
         }
 
-        private static void CreatePad(Transform parent, string name, Vector3 position, Material padMat, GameObject towerPrefab, CurrencyManager currencyManager, WaveManager waveManager)
+        private static void CreatePad(Transform parent, string name, Vector3 position, Material padMat, CurrencyManager currencyManager, WaveManager waveManager)
         {
             GameObject pad = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             pad.name = name;
@@ -341,7 +355,6 @@ namespace MythologyTowerDefense.EditorTools
 
             TowerPad padComponent = pad.AddComponent<TowerPad>();
             SerializedObject so = new SerializedObject(padComponent);
-            so.FindProperty("towerPrefab").objectReferenceValue = towerPrefab;
             so.FindProperty("spawnPoint").objectReferenceValue = spawnPoint.transform;
             so.FindProperty("padRenderer").objectReferenceValue = pad.GetComponent<Renderer>();
             so.FindProperty("currencyManager").objectReferenceValue = currencyManager;
@@ -381,47 +394,58 @@ namespace MythologyTowerDefense.EditorTools
             return SaveAsPrefab(enemy, EnemyPrefabFolder, "LesserYaoguai");
         }
 
-        private static GameObject BuildTowerPrefab(Material baseMat, Material headMat, GameObject projectilePrefab, Material rangeIndicatorMat)
+        private static GameObject BuildTowerPrefab(
+            string prefabName, string displayName,
+            Material baseMat, Material headMat, Material rangeIndicatorMat, GameObject projectilePrefab,
+            float range, float attackInterval, int damage, float projectileSpeed, float splashRadius,
+            Vector3 basePosition, Vector3 baseScale,
+            Vector3 headPosition, Vector3 headScale, Vector3 firePointLocalPosition)
         {
-            GameObject tower = new GameObject("CelestialArcher");
+            GameObject tower = new GameObject(prefabName);
 
             GameObject baseCylinder = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             baseCylinder.name = "Base";
             baseCylinder.transform.SetParent(tower.transform);
-            baseCylinder.transform.localPosition = new Vector3(0f, 0.6f, 0f);
-            baseCylinder.transform.localScale = new Vector3(1f, 0.6f, 1f);
+            baseCylinder.transform.localPosition = basePosition;
+            baseCylinder.transform.localScale = baseScale;
             baseCylinder.GetComponent<Renderer>().sharedMaterial = baseMat;
 
             GameObject head = GameObject.CreatePrimitive(PrimitiveType.Cube);
             head.name = "Head";
             head.transform.SetParent(tower.transform);
-            head.transform.localPosition = new Vector3(0f, 1.5f, 0f);
-            head.transform.localScale = new Vector3(0.6f, 0.6f, 0.9f);
+            head.transform.localPosition = headPosition;
+            head.transform.localScale = headScale;
             head.GetComponent<Renderer>().sharedMaterial = headMat;
             Object.DestroyImmediate(head.GetComponent<BoxCollider>());
 
             GameObject firePoint = new GameObject("FirePoint");
             firePoint.transform.SetParent(head.transform);
-            firePoint.transform.localPosition = new Vector3(0f, 0f, 0.6f);
+            firePoint.transform.localPosition = firePointLocalPosition;
 
             GameObject rangeIndicator = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             rangeIndicator.name = "RangeIndicator";
             rangeIndicator.transform.SetParent(tower.transform);
             rangeIndicator.transform.localPosition = new Vector3(0f, 0.02f, 0f);
-            rangeIndicator.transform.localScale = new Vector3(TowerRange, 0.01f, TowerRange);
+            rangeIndicator.transform.localScale = new Vector3(range, 0.01f, range);
             rangeIndicator.GetComponent<Renderer>().sharedMaterial = rangeIndicatorMat;
             Object.DestroyImmediate(rangeIndicator.GetComponent<CapsuleCollider>());
             rangeIndicator.SetActive(false);
 
             TowerController towerComponent = tower.AddComponent<TowerController>();
             SerializedObject towerSO = new SerializedObject(towerComponent);
+            towerSO.FindProperty("displayName").stringValue = displayName;
+            towerSO.FindProperty("range").floatValue = range;
+            towerSO.FindProperty("attackInterval").floatValue = attackInterval;
+            towerSO.FindProperty("damage").intValue = damage;
+            towerSO.FindProperty("projectileSpeed").floatValue = projectileSpeed;
+            towerSO.FindProperty("splashRadius").floatValue = splashRadius;
             towerSO.FindProperty("firePoint").objectReferenceValue = firePoint.transform;
             towerSO.FindProperty("rotatingHead").objectReferenceValue = head.transform;
             towerSO.FindProperty("projectilePrefab").objectReferenceValue = projectilePrefab;
             towerSO.FindProperty("rangeIndicator").objectReferenceValue = rangeIndicator;
             towerSO.ApplyModifiedProperties();
 
-            return SaveAsPrefab(tower, TowerPrefabFolder, "CelestialArcher");
+            return SaveAsPrefab(tower, TowerPrefabFolder, prefabName);
         }
 
         private static GameObject BuildProjectilePrefab(Material projectileMat)
@@ -518,7 +542,7 @@ namespace MythologyTowerDefense.EditorTools
             es.AddComponent<InputSystemUIInputModule>();
         }
 
-        private static void BuildUI(Transform parent, GameManager gameManager, CurrencyManager currencyManager, BaseHealth baseHealth, WaveManager waveManager, TowerSelectionController selection)
+        private static void BuildUI(Transform parent, GameManager gameManager, CurrencyManager currencyManager, BaseHealth baseHealth, WaveManager waveManager, TowerSelectionController selection, GameObject archerPrefab, GameObject panguPrefab)
         {
             GameObject canvasGO = new GameObject("UI_Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasGO.transform.SetParent(parent);
@@ -567,7 +591,7 @@ namespace MythologyTowerDefense.EditorTools
                 new Vector2(0.66f, 0f), new Vector2(1f, 1f));
 
             RectTransform selectionPanel = CreatePanel(canvasGO.transform, "SelectionPanel", new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(170f, 170f), new Vector2(300f, 220f), DeepTeal);
-            Text selectionText = CreateText("SelectionText", selectionPanel, builtinFont, "Celestial Archer", 22,
+            Text selectionText = CreateText("SelectionText", selectionPanel, builtinFont, "Tower Info", 22,
                 new Vector2(0f, 0.3f), new Vector2(1f, 1f), TextAnchor.UpperLeft, CreamHighlight);
 
             Button upgradePlaceholder = CreateButton("UpgradeButtonPlaceholder", selectionPanel, builtinFont, "Upgrade (Soon)",
@@ -575,6 +599,50 @@ namespace MythologyTowerDefense.EditorTools
             upgradePlaceholder.interactable = false;
 
             selectionPanel.gameObject.SetActive(false);
+
+            RectTransform buildPanel = CreatePanel(canvasGO.transform, "BuildChoicePanel", new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(170f, 170f), new Vector2(300f, 220f), DeepTeal);
+            Text buildPanelTitle = CreateText("BuildPanelTitle", buildPanel, builtinFont, "Build Tower", 22,
+                new Vector2(0f, 0.75f), new Vector2(1f, 1f), TextAnchor.UpperLeft, CreamHighlight);
+
+            Button archerOptionButton = CreateButton("ArcherOptionButton", buildPanel, builtinFont, string.Empty,
+                new Vector2(0.05f, 0.4f), new Vector2(0.95f, 0.72f));
+            Text archerOptionLabel = archerOptionButton.GetComponentInChildren<Text>();
+
+            Button panguOptionButton = CreateButton("PanguOptionButton", buildPanel, builtinFont, string.Empty,
+                new Vector2(0.05f, 0.05f), new Vector2(0.95f, 0.37f));
+            Text panguOptionLabel = panguOptionButton.GetComponentInChildren<Text>();
+
+            buildPanel.gameObject.SetActive(false);
+
+            GameObject buildMenuGO = new GameObject("TowerBuildMenuController");
+            buildMenuGO.transform.SetParent(parent);
+            TowerBuildMenuController buildMenu = buildMenuGO.AddComponent<TowerBuildMenuController>();
+            SerializedObject buildMenuSO = new SerializedObject(buildMenu);
+            buildMenuSO.FindProperty("selectionController").objectReferenceValue = selection;
+            buildMenuSO.FindProperty("panel").objectReferenceValue = buildPanel.gameObject;
+
+            SerializedProperty buttonsProp = buildMenuSO.FindProperty("optionButtons");
+            buttonsProp.arraySize = 2;
+            buttonsProp.GetArrayElementAtIndex(0).objectReferenceValue = archerOptionButton;
+            buttonsProp.GetArrayElementAtIndex(1).objectReferenceValue = panguOptionButton;
+
+            SerializedProperty labelsProp = buildMenuSO.FindProperty("optionLabels");
+            labelsProp.arraySize = 2;
+            labelsProp.GetArrayElementAtIndex(0).objectReferenceValue = archerOptionLabel;
+            labelsProp.GetArrayElementAtIndex(1).objectReferenceValue = panguOptionLabel;
+
+            SerializedProperty catalogProp = buildMenuSO.FindProperty("catalog");
+            catalogProp.arraySize = 2;
+            SerializedProperty archerEntry = catalogProp.GetArrayElementAtIndex(0);
+            archerEntry.FindPropertyRelative("displayName").stringValue = "Celestial Archer";
+            archerEntry.FindPropertyRelative("prefab").objectReferenceValue = archerPrefab;
+            archerEntry.FindPropertyRelative("cost").intValue = 30;
+            SerializedProperty panguEntry = catalogProp.GetArrayElementAtIndex(1);
+            panguEntry.FindPropertyRelative("displayName").stringValue = "Pangu Titan";
+            panguEntry.FindPropertyRelative("prefab").objectReferenceValue = panguPrefab;
+            panguEntry.FindPropertyRelative("cost").intValue = 50;
+
+            buildMenuSO.ApplyModifiedProperties();
 
             HUDController hud = canvasGO.AddComponent<HUDController>();
             SerializedObject so = new SerializedObject(hud);

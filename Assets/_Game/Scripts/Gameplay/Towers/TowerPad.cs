@@ -4,10 +4,13 @@ using MythologyTowerDefense.Gameplay.Waves;
 
 namespace MythologyTowerDefense.Gameplay.Towers
 {
+    /// <summary>
+    /// A buildable slot beside the road. Which tower gets built here is chosen by the player
+    /// (via TowerBuildMenuController) at click time, not fixed per pad — any pad can host any
+    /// tower in the catalog.
+    /// </summary>
     public class TowerPad : MonoBehaviour
     {
-        [SerializeField] private GameObject towerPrefab;
-        [SerializeField] private int cost = 30;
         [SerializeField] private Transform spawnPoint;
         [SerializeField] private Renderer padRenderer;
         [SerializeField] private CurrencyManager currencyManager;
@@ -17,14 +20,13 @@ namespace MythologyTowerDefense.Gameplay.Towers
 
         public bool IsOccupied { get; private set; }
         public TowerController PlacedTower { get; private set; }
-        public int Cost => cost;
 
         private void Awake()
         {
             ApplyColor();
         }
 
-        public bool TryPlaceTower()
+        public bool TryPlaceTower(GameObject towerPrefab, int cost)
         {
             if (IsOccupied || towerPrefab == null || currencyManager == null)
             {

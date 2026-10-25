@@ -7,9 +7,24 @@
 
 ## Trạng thái tổng quan
 
-**⚠️ Bug đã tìm & sửa:** pad đặt tháp cách tâm đường **5.5** đơn vị nhưng tầm bắn tháp theo plan chỉ **4.5** → quái không bao giờ lọt vào tầm, tháp xây được nhưng không bao giờ bắn. Bug này không bị smoke test cũ phát hiện vì test đặt quái giả định sát tháp thay vì dùng đúng khoảng cách thật từ pad tới đường. Đã sửa: giảm khoảng cách pad xuống **3.8** (nằm an toàn trong tầm 4.5), đồng thời sửa smoke test để đặt quái đúng tại điểm giữa đoạn đường mà pad đó canh giữ — test giờ phản ánh đúng hình học thật, không còn là test "giả". Đã rebuild scene + WebGL, đang chờ bạn xác nhận lại.
+**Toàn bộ 8 milestone (0-7) của Master Plan: hoàn thành, đã kiểm chứng cả smoke test lẫn Play Mode (Editor + WebGL) — xem lịch sử bug ở các mục milestone bên dưới.**
 
-**Đã qua blocker:** bạn đã chạy `Run Headless Smoke Test` → kết quả **PASS** (xem log), và `Build Prototype Scene (and Save)` → đã lưu `Assets/_Game/Scenes/Main.unity` thành công (169KB). Logic gameplay cốt lõi đã được kiểm chứng tự động. Còn thiếu: xác nhận bằng mắt trong Play Mode (đang chờ bạn bấm Play và báo lại).
+## Mở rộng #1 — Thêm tháp thứ 2: Pangu Titan (sát thương diện rộng)
+
+Theo đề nghị của bạn và roster gợi ý ở Master Plan §7.7 (Bàn Cổ / Pangu — "Heavy area damage, slow powerful strikes with splash damage").
+
+- [x] ✅ `ProjectileController` hỗ trợ splash damage (tham số `splashRadius`, damage tất cả quái trong bán kính khi va chạm, không damage đôi mục tiêu chính)
+- [x] ✅ `TowerController` thêm `displayName`, `splashRadius`, generic hoá để dùng chung cho nhiều loại tháp
+- [x] ✅ `TowerPad` đổi thành generic — không còn gắn cứng 1 loại tháp/giá, nhận prefab+giá lúc xây
+- [x] ✅ `TowerBuildMenuController` (mới) — bảng chọn tháp hiện ra khi click pad trống, đúng theo spec §6 ("clicking an empty pad opens a small tower choice")
+- [x] ✅ Pangu Titan: giá 50, range 4.5 (bằng Archer, tránh lặp lại bug pad-offset-vs-range), dame 20, bắn chậm 1.6s, splash 2.0, hình dáng to hơn (đá/cinnabar)
+- [x] ✅ HUD panel thông tin tháp hiển thị tên + splash radius khi chọn tháp loại splash
+
+**⚠️ 2 bug thật tìm thấy & đã sửa trong lần mở rộng này:**
+1. Test mua Pangu (50 vàng) fail vì các bước test trước đã tiêu gần hết vàng khởi điểm (60) — không phải bug sản phẩm, chỉ là test thiếu set up tiền → đã thêm `currency.Add(50)` trước đoạn test đó.
+2. **Bug thật trong `TowerController.FindTarget()`**: đo khoảng cách tới quái từ `firePoint` (đầu nòng, xoay theo hướng ngắm) thay vì từ gốc tháp (`transform.position`, tâm vòng tròn tầm bắn hiển thị cho người chơi). Phát bắn đầu tiên, đầu nòng ở hướng mặc định (chưa từng ngắm ai) nên có thể tình cờ trỏ sai hướng, khiến 1 quái rõ ràng nằm trong vòng tròn tầm bắn hiển thị lại bị tính "ngoài tầm". Hậu quả: tháp mới xây đôi khi bỏ lỡ mục tiêu đầu tiên một cách không nhất quán, tuỳ hướng mặc định của model. Đã sửa: đo từ `transform.position` — khớp đúng với vòng tròn tầm bắn hiển thị, không còn phụ thuộc hướng ngắm hiện tại.
+
+Smoke test đã mở rộng thêm: test splash damage bắn trúng 2 quái cùng lúc bằng 1 phát đạn (xác minh qua health thật, không chỉ "có tạo projectile").
 
 ---
 
@@ -85,13 +100,23 @@
 
 ## Việc đang chờ bạn
 
-✅ Không còn blocker. Tất cả 8 milestone đã xong và kiểm chứng. README.md đã có hướng dẫn đầy đủ để bạn (hoặc người khác) mở lại project, test, và build sau này.
+✅ Đã xác nhận bằng mắt (bạn xác nhận): bảng chọn tháp hiện đúng khi click pad trống, xây Pangu Titan hoạt động đúng (splash damage nhiều quái).
 
-Gợi ý bước tiếp theo (tuỳ bạn): commit + push code lên GitHub (chưa tự động commit vì chưa được yêu cầu), hoặc mở rộng thêm nội dung (tháp thứ 2, nhiều wave hơn...) theo roadmap "postponed" trong Master Plan §7.7/§15.
+**⚠️ Bug thật tìm thấy trên WebGL (và sửa):** `TowerBuildMenuController` đọc `selectionController.PendingPad` **trực tiếp tại thời điểm bấm nút** thay vì lưu lại ngay khi bảng hiện ra. Khi `TowerSelectionController`'s raycast thế giới chạy cùng lúc (cùng frame) với việc bấm nút UI — khả năng do `IsPointerOverGameObject()` không chặn kịp trong WebGL — `PendingPad` bị xoá về null trước khi nút kịp đọc, khiến bấm nút không có phản ứng gì. Triệu chứng: bảng chọn tháp hiện ra đúng, nhưng bấm Celestial Archer/Pangu Titan không xây được gì. Đã sửa: cache `pendingPad` vào field riêng ngay khi bảng hiện ra, không đọc lại giá trị "sống" từ selectionController lúc bấm nút nữa.
+
+Phát hiện phụ: WebGL cần **click đầu tiên để focus canvas** (browser không gửi input cho tới khi canvas được focus) — click đầu tiên trên trang luôn "mất tác dụng", đây là hành vi bình thường của WebGL/browser, không phải bug.
+
+**⚠️ Bug thứ 2 (bug thật sự, đã tìm ra tận gốc):** "Start Wave" ra chữ đúng nhưng quái đứng im, phải bấm Pause→Resume mới chạy. Đã thử nhiều hướng (click-to-start overlay, Canvas.ForceUpdateCanvases, runInBackground...) nhưng không dứt điểm, cho tới khi thêm bộ đếm hiển thị trực tiếp `Time.timeScale` lên màn hình — phát hiện **`Time.timeScale` = 0 ngay từ lúc game khởi động**, dù không có dòng code nào của ta đặt giá trị đó. Lần theo thì ra `ProjectSettings/TimeManager.asset` có `m_TimeScale: 0` (thay vì 1 bình thường) — một giá trị mặc định sai của chính project. Unity Editor "bỏ qua" giá trị này khi vào Play Mode (nên test Editor không phát hiện ra), nhưng bản build WebGL thật thì dùng đúng giá trị 0 này, khiến quái spawn đúng (có đăng ký) nhưng không bao giờ di chuyển (`Time.deltaTime` luôn 0) cho tới khi người dùng vô tình đặt lại `timeScale=1` qua nút Pause/Resume.
+
+**Đã sửa tận gốc:** thêm `Time.timeScale = 1f;` vào `GameManager.Awake()` — đảm bảo đúng ngay từ đầu bất kể project setting là gì (an toàn hơn, không phụ thuộc file cấu hình có thể bị Unity tự ghi đè lại về 0 mà ta quan sát được khi thử sửa trực tiếp file YAML).
+
+**Dọn dẹp sau khi xác nhận hết bug:** gỡ bỏ overlay "Click to Start" (hoá ra không cần thiết — nguyên nhân thật là timeScale, không phải vấn đề focus trình duyệt) và xoá toàn bộ log/debug-readout tạm thời dùng để chẩn đoán.
+
+✅ Đã build lại WebGL bản sạch (không overlay, không debug) — `Builds/WebGL/`, ~45MB. **Bạn đã xác nhận: hoạt động đúng hoàn toàn**, không cần workaround nào nữa.
 
 ---
 
-## File đã tạo/đổi trong phiên tái cấu trúc này
+## File đã tạo/đổi (tính cả 2 đợt: tái cấu trúc ban đầu + mở rộng tháp thứ 2)
 
 ```
 Assets/_Game/Scripts/Core/GameManager.cs
@@ -100,18 +125,20 @@ Assets/_Game/Scripts/Gameplay/Enemies/EnemyController.cs
 Assets/_Game/Scripts/Gameplay/Economy/CurrencyManager.cs
 Assets/_Game/Scripts/Gameplay/Economy/BaseHealth.cs
 Assets/_Game/Scripts/Gameplay/Waves/WaveManager.cs
-Assets/_Game/Scripts/Gameplay/Towers/ProjectileController.cs
-Assets/_Game/Scripts/Gameplay/Towers/TowerController.cs
-Assets/_Game/Scripts/Gameplay/Towers/TowerPad.cs
-Assets/_Game/Scripts/UI/TowerSelectionController.cs
-Assets/_Game/Scripts/UI/HUDController.cs
-Assets/_Game/Editor/PrototypeSceneBuilder.cs
-Assets/_Game/Editor/PrototypeSmokeTest.cs
+Assets/_Game/Scripts/Gameplay/Towers/ProjectileController.cs     (sửa: + splash damage)
+Assets/_Game/Scripts/Gameplay/Towers/TowerController.cs          (sửa: + displayName/splashRadius, fix FindTarget range bug)
+Assets/_Game/Scripts/Gameplay/Towers/TowerPad.cs                 (sửa: generic hoá, nhận prefab/giá lúc xây)
+Assets/_Game/Scripts/UI/TowerSelectionController.cs              (sửa: + PendingPad cho bảng chọn tháp)
+Assets/_Game/Scripts/UI/TowerBuildMenuController.cs              (mới)
+Assets/_Game/Scripts/UI/HUDController.cs                         (sửa: dùng DisplayName/SplashRadius động)
+Assets/_Game/Editor/PrototypeSceneBuilder.cs                     (sửa: build 2 tháp + UI chọn tháp)
+Assets/_Game/Editor/PrototypeSmokeTest.cs                        (sửa: + test splash damage)
 Assets/_Game/Editor/WebGLBuildScript.cs
-Assets/_Game/Scenes/Main.unity          (scene thật, đã build & lưu)
-README.md                                (mới)
+Assets/_Game/Scenes/Main.unity          (scene thật, đã build & lưu — có cả 2 tháp)
+Assets/_Game/Prefabs/Towers/PanguTitan.prefab  (mới)
+README.md
 Document/PROGRESS.md                     (file này)
 
-Đã xoá (thay thế hoàn toàn bởi cấu trúc _Game/ ở trên):
+Đã xoá (thay thế hoàn toàn bởi cấu trúc _Game/ ở trên, đợt tái cấu trúc đầu):
 Assets/Scripts/  Assets/Materials/  Assets/Prefabs/  Assets/Scenes/SampleScene.unity
 ```

@@ -23,6 +23,18 @@ namespace MythologyTowerDefense.Core
 
         public event Action<GameState> OnStateChanged;
 
+        private void Awake()
+        {
+            // Never rely on the engine/platform's own boot-time default for this — this project's
+            // ProjectSettings/TimeManager.asset was found set to m_TimeScale: 0 (not the usual 1),
+            // which the Editor's Play Mode silently papered over but a real WebGL build did not:
+            // every enemy spawned registered correctly but never moved (Time.deltaTime stayed 0)
+            // until some other action (Pause then Resume) happened to set timeScale to 1 for the
+            // first time. Setting it explicitly here makes correctness independent of that project
+            // setting entirely.
+            Time.timeScale = 1f;
+        }
+
         private void OnEnable()
         {
             if (baseHealth != null)
